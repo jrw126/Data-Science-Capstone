@@ -1,0 +1,61 @@
+---
+title: "Data Science Capstone"
+author: "John Wright"
+date: "Monday, March 09, 2015"
+output: html_document
+---
+
+# Prepare environment
+```{r}
+# Libraries
+library(tm)
+library(openNLP)
+library(NLP)
+library(RWeka)
+
+# Set wd to the right computer
+if (Sys.getenv("USERNAME") == "jwright") {
+      setwd("C:/Users/jwright/Desktop/p6/Data-Science-Capstone")
+} else setwd("D:/Projects/Coursera/Data-Science-Capstone")
+
+# Load data
+set.seed(123)
+
+shrunk <- function(x) {
+      if (class(x) == "data.frame") {
+            nrow(x) / 10
+      } else length(x) / 10
+}
+
+en.t <- readLines("./en_US/en_US.twitter.txt")
+en.t <- sample(en.t, size = shrunk(en.t))
+
+en.b <- readLines("./en_US/en_US.blogs.txt")
+en.b <- sample(en.b, size = shrunk(en.b))
+
+en.n <- readLines("./en_US/en_US.news.txt")
+en.n <- sample(en.n, size = shrunk(en.n))
+
+```
+
+Starting help:
+http://www.exegetic.biz/blog/2013/09/text-mining-the-complete-works-of-william-shakespeare/
+http://www.unt.edu/rss/class/Jon/Benchmarks/TextMining_L_JDS_Jan2014.pdf
+
+Other helpful data sources ideas:
+*     Table of names (all languages)
+*     Table of locations (perhaps associate them with a language)
+*     Table of emoticons
+*     Table of common slang in English, German, Russian and Finnish
+*     Table of common abbreviations
+*     Table of profanity
+*     Sentiment Analysis
+*     Table of topics with each word mapped to a type of topic (or probabilities of words being associated with each topic)
+
+
+
+```{r, echo=FALSE}
+
+```
+
+
