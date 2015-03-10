@@ -9,9 +9,13 @@ output: html_document
 ```{r}
 # Libraries
 library(tm)
+library(SnowballC)
 library(openNLP)
 library(NLP)
 library(RWeka)
+library(slam)
+library(wordcloud)
+library(RColorBrewer)
 
 # Set wd to the right computer
 if (Sys.getenv("USERNAME") == "jwright") {
@@ -62,12 +66,37 @@ corpusCleaner <- function(x) {
       x <- tm_map(x, removePunctuation)
       x <- tm_map(x, removeNumbers)
       x <- tm_map(x, removeWords, stopwords("english"))
+      x <- tm_map(x, content_transformer(function(z) gsub("[^[:alnum:]///' ]", "", z)))
+      x <- tm_map(x, stemDocument)
+      x <- tm_map(x, stripWhitespace)
       x
 }
 
+# Make a corpus with each data set.
 en.b <- corpusCleaner(en.b)
 en.n <- corpusCleaner(en.n)
 en.t <- corpusCleaner(en.t)
+
+# Combine the corpora into 1.
+# http://stackoverflow.com/questions/20971094/tm-combine-list-of-corpora
+en.all <- do.call(function(...) c(..., recursive = T), list(en.b, en.n, en.t))
+
+# Create a term document matrix
+tdm <- TermDocumentMatrix(en.all)
+
+# Create a term document matrix that includes only the common tokens
+tdm.c <- removeSparseTerms(tdm, 0.99) # add values to play with size
+
+# Create a dense term document matrix from the common tokens
+tdm.d <- as.matrix(tdm.c)
+
+# Create a wordcloud because why not
+pal <- brewer.pal(9, "BuGn")[-(1:4)]
+wordcloud(rownames(tdm.d), rowSums(tdm.d), min.freq = 1, color = pal)
+
+# Create a frequency table of the dense matrix
+freq <- data.frame(word = rownames(tdm.d), count = rowSums(tdm.d), row.names = NULL)
+freq <- freq[order(freq$count), ]
 
 ```
 
