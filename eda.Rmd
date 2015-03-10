@@ -16,7 +16,7 @@ library(RWeka)
 # Set wd to the right computer
 if (Sys.getenv("USERNAME") == "jwright") {
       setwd("C:/Users/jwright/Desktop/p6/Data-Science-Capstone")
-} else setwd("D:/Projects/Coursera/Data-Science-Capstone")
+} else setwd("D:/Coursera/Data-Science-Capstone")
 
 # Load data
 set.seed(123)
@@ -52,9 +52,22 @@ Other helpful data sources ideas:
 *     Sentiment Analysis
 *     Table of topics with each word mapped to a type of topic (or probabilities of words being associated with each topic)
 
-
-
+# Cleaning
 ```{r, echo=FALSE}
+
+# Convert each data set to a corpus and clean the data
+corpusCleaner <- function(x) {
+      x <- Corpus(VectorSource(x))
+      x <- tm_map(x, content_transformer(tolower))
+      x <- tm_map(x, removePunctuation)
+      x <- tm_map(x, removeNumbers)
+      x <- tm_map(x, removeWords, stopwords("english"))
+      x
+}
+
+en.b <- corpusCleaner(en.b)
+en.n <- corpusCleaner(en.n)
+en.t <- corpusCleaner(en.t)
 
 ```
 
