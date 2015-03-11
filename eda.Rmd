@@ -16,6 +16,8 @@ library(RWeka)
 library(slam)
 library(wordcloud)
 library(RColorBrewer)
+library(ggplot2)
+library(reshape2)
 
 # Set wd to the right computer
 if (Sys.getenv("USERNAME") == "jwright") {
@@ -78,7 +80,6 @@ en.n <- corpusCleaner(en.n)
 en.t <- corpusCleaner(en.t)
 
 # Combine the corpora into 1.
-# http://stackoverflow.com/questions/20971094/tm-combine-list-of-corpora
 en.all <- do.call(function(...) c(..., recursive = T), list(en.b, en.n, en.t))
 
 # Create a term document matrix
@@ -91,12 +92,24 @@ tdm.c <- removeSparseTerms(tdm, 0.99) # add values to play with size
 tdm.d <- as.matrix(tdm.c)
 
 # Create a wordcloud because why not
-pal <- brewer.pal(9, "BuGn")[-(1:4)]
-wordcloud(rownames(tdm.d), rowSums(tdm.d), min.freq = 1, color = pal)
+# pal <- brewer.pal(9, "BuGn")[-(1:4)]
+# wordcloud(rownames(tdm.d), rowSums(tdm.d), min.freq = 1, color = pal)
 
 # Create a frequency table of the dense matrix
 freq <- data.frame(word = rownames(tdm.d), count = rowSums(tdm.d), row.names = NULL)
-freq <- freq[order(freq$count), ]
+freq <- freq[order(-freq$count), ]
+
+# Create N-grams
+# http://stackoverflow.com/questions/19615181/finding-ngrams-in-r-and-comparing-ngrams-across-corpora
+bgram <- function(x) {NGramTokenizer(x, Weka_control(min = 2, max = 2))}
+tgram <- function(x) {NGramTokenizer(x, Weka_control(min = 3, max = 3))}
+
+tdm.2 <- TermDocumentMatrix(en.all, control = list(tokenize = bgram))
+# tdm.2 <- removeSparseTerms(tdm.2, 0.99) # this param needs tweaking
+
+tdm.3 <- TermDocumentMatrix(en.all, control = list(tokenize = tgram))
+# tdm.3 <- removeSparseTerms(tdm.3, 0.99) # this param needs tweaking
+
 
 ```
 
