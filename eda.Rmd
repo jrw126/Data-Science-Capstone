@@ -73,7 +73,8 @@ corpusCleaner <- function(x) {
       x <- tm_map(x, removePunctuation)
       x <- tm_map(x, removeNumbers)
       x <- tm_map(x, removeWords, stopwords("english"))
-      x <- tm_map(x, content_transformer(function(z) gsub("[^[:alnum:]///' ]", "", z)))
+#       x <- tm_map(x, content_transformer(function(z) gsub("[^[:alnum:]///' ]", "", z))) # try this encoding again [^0-9A-Za-z///' ]
+      x <- tm_map(x, content_transformer(function(z) gsub("[^0-9A-Za-z///' ]", "", z))) # this seems to have the desired effect, not the above
       x <- tm_map(x, stemDocument)
       x <- tm_map(x, stripWhitespace)
       x
