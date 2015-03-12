@@ -23,6 +23,7 @@ library(reshape2)
 # http://nlpwp.org/book/index.xhtml
 # http://www.nltk.org/book/?=
 # http://www.e-booksdirectory.com/listing.php?category=281
+# http://simplystatistics.org/2015/02/05/johns-hopkins-data-science-specialization-top-performers/
 
 # Set wd to the right computer
 if (Sys.getenv("USERNAME") == "jwright") {
@@ -34,8 +35,8 @@ set.seed(123)
 
 shrunk <- function(x) {
       if (class(x) == "data.frame") {
-            nrow(x) / 10
-      } else length(x) / 10
+            nrow(x) / 20
+      } else length(x) / 20
 }
 
 en.t <- readLines("./en_US/en_US.twitter.txt")
@@ -44,7 +45,8 @@ en.t <- sample(en.t, size = shrunk(en.t))
 en.b <- readLines("./en_US/en_US.blogs.txt")
 en.b <- sample(en.b, size = shrunk(en.b))
 
-en.n <- readLines("./en_US/en_US.news.txt")
+en.n <- file("./en_US/en_US.news.txt", open = "rb")
+en.n <- readLines(en.n, encoding = "UTF-8")
 en.n <- sample(en.n, size = shrunk(en.n))
 
 ```
@@ -72,7 +74,7 @@ corpusCleaner <- function(x) {
       x <- tm_map(x, content_transformer(tolower))
       x <- tm_map(x, removePunctuation)
       x <- tm_map(x, removeNumbers)
-      x <- tm_map(x, removeWords, stopwords("english"))
+#       x <- tm_map(x, removeWords, stopwords("english")) # consider removing this
 #       x <- tm_map(x, content_transformer(function(z) gsub("[^[:alnum:]///' ]", "", z))) # try this encoding again [^0-9A-Za-z///' ]
       x <- tm_map(x, content_transformer(function(z) gsub("[^0-9A-Za-z///' ]", "", z))) # this seems to have the desired effect, not the above
       x <- tm_map(x, stemDocument)
