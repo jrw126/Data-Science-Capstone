@@ -131,4 +131,32 @@ tgram.freq <- tgram.freq[order(-tgram.freq$count), ]
 
 ```
 
+# Exploratory Analysis
+```{r}
+# http://beyondvalence.blogspot.com/2014/01/text-mining-4-performing-term.html
+findFreqTerms(tdm, 99)
 
+termFreq <- freq[freq$count >= quantile(freq$count, 0.5), ] # above the 50th percentile
+qplot(x = word, y = count, data = termFreq, main = "Term Frequencies",
+      geom = "bar", xlab = "Terms", stat = "identity") + coord_flip()
+
+termFreq <- with(bgram.freq, bgram.freq[count >= quantile(count, 0.95), ])
+qplot(x = word, y = count, data = termFreq, main = "Bigram Frequencies",
+      geom = "bar", xlab = "Bigrams", stat = "identity") + coord_flip()
+
+termFreq <- with(tgram.freq, tgram.freq[count >= quantile(count, 0.995) ,])
+qplot(x = word, y = count, data = termFreq, main = "Trigram Frequencies",
+      geom = "bar", xlab = "Trigrams", stat = "identity") + coord_flip()
+
+# try a graph as percentages
+termFreq <- data.frame(freq, percent = freq$count / sum(freq$count) * 100)
+termFreq <- termFreq[termFreq$percent > 0.25, ]
+qplot(x = word, y = percent, data = termFreq, main = "Term Frequency Percent",
+      geom = "bar", xlab = "Terms", stat = "identity") + coord_flip()
+
+
+
+
+# findAssocs(tdm, "here", 0.1)
+
+```
