@@ -33,12 +33,14 @@ if (Sys.getenv("USERNAME") == "jwright") {
 # Load data
 set.seed(123)
 
+# Function to shrink the data to 1/n of its original size
 shrunk <- function(x) {
       if (class(x) == "data.frame") {
             nrow(x) / 20
       } else length(x) / 20
 }
 
+# Load and sample each file
 en.t <- readLines("./en_US/en_US.twitter.txt")
 en.t <- sample(en.t, size = shrunk(en.t))
 
@@ -74,13 +76,11 @@ corpusCleaner <- function(x) {
       x <- tm_map(x, content_transformer(tolower))
       x <- tm_map(x, removePunctuation)
       x <- tm_map(x, removeNumbers)
-#       x <- tm_map(x, removeWords, stopwords("english")) # consider removing this
-#       x <- tm_map(x, content_transformer(function(z) gsub("[^[:alnum:]///' ]", "", z))) # try this encoding again [^0-9A-Za-z///' ]
-      x <- tm_map(x, content_transformer(function(z) gsub("[^0-9A-Za-z///' ]", "", z))) # this seems to have the desired effect, not the above
+      x <- tm_map(x, content_transformer(function(z) gsub("[^0-9A-Za-z///' ]", "", z)))
       x <- tm_map(x, stemDocument)
       x <- tm_map(x, stripWhitespace)
       x
-} # still need to find a way to filter out the a-hat, maybe use encoding?
+}
 
 # Make a corpus with each data set.
 en.b <- corpusCleaner(en.b)
@@ -94,14 +94,10 @@ en.all <- do.call(function(...) c(..., recursive = T), list(en.b, en.n, en.t))
 tdm <- TermDocumentMatrix(en.all)
 
 # Create a term document matrix that includes only the common tokens
-tdm.c <- removeSparseTerms(tdm, 0.99) # add values to play with size
+tdm.c <- removeSparseTerms(tdm, 0.99) # add values to play with size. had this at .99 before
 
 # Create a dense term document matrix from the common tokens
 tdm.d <- as.matrix(tdm.c)
-
-# Create a wordcloud because why not
-# pal <- brewer.pal(9, "BuGn")[-(1:4)]
-# wordcloud(rownames(tdm.d), rowSums(tdm.d), min.freq = 1, color = pal)
 
 # Create a frequency table of the dense matrix
 freq <- data.frame(word = rownames(tdm.d), count = rowSums(tdm.d), row.names = NULL)
@@ -134,29 +130,41 @@ tgram.freq <- tgram.freq[order(-tgram.freq$count), ]
 # Exploratory Analysis
 ```{r}
 # http://beyondvalence.blogspot.com/2014/01/text-mining-4-performing-term.html
+# http://rstudio-pubs-static.s3.amazonaws.com/39474_1e1930a37b6f4b1bbfaf916db55b0397.html
 findFreqTerms(tdm, 99)
 
+# Create frequency tables of unigrams, bigrams, and trigrams
+# Unigrams with frequencies in the 50th percentile
 termFreq <- freq[freq$count >= quantile(freq$count, 0.5), ] # above the 50th percentile
-qplot(x = word, y = count, data = termFreq, main = "Term Frequencies",
-      geom = "bar", xlab = "Terms", stat = "identity") + coord_flip()
+qplot(x = word, y = count, data = termFreq, 
+      main = "Term Frequencies", geom = "bar", xlab = "Unigrams", ylab = "Frequency", 
+      stat = "identity", fill = I("royalblue4")) + coord_flip()
 
+# Bigrams with frequencies in the 95th percentile
 termFreq <- with(bgram.freq, bgram.freq[count >= quantile(count, 0.95), ])
-qplot(x = word, y = count, data = termFreq, main = "Bigram Frequencies",
-      geom = "bar", xlab = "Bigrams", stat = "identity") + coord_flip()
+qplot(x = word, y = count, data = termFreq, 
+      main = "Bigram Frequencies", geom = "bar", xlab = "Bigrams", ylab = "Frequency",
+      stat = "identity", fill = I("red4")) + coord_flip()
 
+# Trigrams with frequencies in the 99.5th percentile
 termFreq <- with(tgram.freq, tgram.freq[count >= quantile(count, 0.995) ,])
 qplot(x = word, y = count, data = termFreq, main = "Trigram Frequencies",
-      geom = "bar", xlab = "Trigrams", stat = "identity") + coord_flip()
+      geom = "bar", xlab = "Trigrams", ylab = "Frequency",
+      stat = "identity", fill = I("seagreen4")) + coord_flip()
 
-# try a graph as percentages
-termFreq <- data.frame(freq, percent = freq$count / sum(freq$count) * 100)
-termFreq <- termFreq[termFreq$percent > 0.25, ]
-qplot(x = word, y = percent, data = termFreq, main = "Term Frequency Percent",
-      geom = "bar", xlab = "Terms", stat = "identity") + coord_flip()
+# How many unique words do you need in a frequency sorted dictionary 
+# to cover 50% of all word instances in the language? 90%?
+# http://wordnet.princeton.edu/
 
+totalWords <- removeSparseTerms(tdm, 0.9999)
 
+uWords <- rownames(totalWords)
+length(uWords) # Number of unique words
 
-
-# findAssocs(tdm, "here", 0.1)
+totalWords <- rowSums(as.matrix(inspect(totalWords[1:2000, ])))
 
 ```
+
+
+
+
