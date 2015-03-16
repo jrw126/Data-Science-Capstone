@@ -8,6 +8,10 @@ output: html_document
 # Prepare environment
 ```{r}
 # Libraries
+if(Sys.getenv("JAVA_HOME")!=""){
+    Sys.setenv(JAVA_HOME="")
+}
+
 library(tm)
 library(SnowballC)
 library(openNLP)
@@ -16,7 +20,7 @@ library(RWeka)
 library(slam)
 library(wordcloud)
 library(RColorBrewer)
-library(ggplot2)
+library(ggplot2); library(scales)
 library(reshape2)
 
 # additional resource
@@ -128,6 +132,8 @@ tgram.freq <- tgram.freq[order(-tgram.freq$count), ]
 ```
 
 # Exploratory Analysis
+Some words are more frequent than others - what are the distributions of word frequencies? 
+What are the frequencies of 2-grams and 3-grams in the dataset? 
 ```{r}
 # http://beyondvalence.blogspot.com/2014/01/text-mining-4-performing-term.html
 # http://rstudio-pubs-static.s3.amazonaws.com/39474_1e1930a37b6f4b1bbfaf916db55b0397.html
@@ -151,20 +157,85 @@ termFreq <- with(tgram.freq, tgram.freq[count >= quantile(count, 0.995) ,])
 qplot(x = word, y = count, data = termFreq, main = "Trigram Frequencies",
       geom = "bar", xlab = "Trigrams", ylab = "Frequency",
       stat = "identity", fill = I("seagreen4")) + coord_flip()
+```
 
-# How many unique words do you need in a frequency sorted dictionary 
-# to cover 50% of all word instances in the language? 90%?
-# http://wordnet.princeton.edu/
+```{r}
+# Too large to work with as a matrix, so I am doing this iteratively and writing the results to a file
+# This takes a long time to run.
+# totalWords <- removeSparseTerms(tdm, 0.9999)
+# uWords <- rownames(totalWords)
+# data <- c()
+# for (word in 1:length(uWords)) { 
+#       r <- c(uWords[word], sum(totalWords[uWords[word], ]))
+#       data <- c(data, r)
+# }
+# data <- data.frame(word = data[seq(1, length(data), 2)], count = as.integer(data[seq(2, length(data), 2)]))
+# 
+# write.table(data, "completeUnigramFreqTable.txt", sep = "\t", row.names = F)
 
-totalWords <- removeSparseTerms(tdm, 0.9999)
+# This code creates the file used in the chunk below
+```
 
-uWords <- rownames(totalWords)
-length(uWords) # Number of unique words
+How many unique words do you need in a frequency sorted dictionary 
+to cover 50% of all word instances in the language? 90%?
+```{r}
+ugram.freq <- read.delim("completeUnigramFreqTable.txt", sep = "\t", header = T, stringsAsFactors = F)
+ugram.freq <- ugram.freq[order(-ugram.freq$count), ]
+ugram.freq$cumsum <- cumsum(ugram.freq$count)
+ugram.freq$pctcoverage <- ugram.freq$cumsum / sum(ugram.freq$count)
 
-totalWords <- rowSums(as.matrix(inspect(totalWords[1:2000, ])))
+pcts <- seq(.1, .9, .1)
+pts <- sapply(pcts, function(x) with(ugram.freq, which.max(pctcoverage[pctcoverage <= x])))
+
+qplot(x = pctcoverage, y = 1:nrow(ugram.freq), data = ugram.freq,
+      main = "Percent of Language Coverage", xlab = "Percentage", ylab = "Number of Unique Words") +
+      ggtitle(expression(atop(bold("Percent of Word Instance Coverage"), atop(italic("per unique word"), "")))) + 
+      geom_point(colour = I("cadetblue3")) +
+      geom_point(data = ugram.freq[pts, ], aes(x = pctcoverage, y = pts), colour = I("darkred"), size = 4) + 
+      geom_text(data = ugram.freq[pts, ], aes(x = pctcoverage, y = pts + 170, label = comma(pts)), colour = "darkred") +
+      scale_x_continuous(breaks = seq(0, 1, .1), labels = percent) + 
+      scale_y_continuous(breaks = seq(0, 9000, 1000), labels = comma)
 
 ```
 
+How do you evaluate how many of the words come from foreign languages?
+To answer this, it would help to have a list of all words in the english language. It isn't feasible to get a list of all words in all non-English languages. Many might not be documented very well online and some use non-latin alphabets.
+http://wordnet.princeton.edu/
+```{r}
+# Function to read the Princeton WordNet files
+wordnetReader <- function(x, n) {
+      d <- readLines(x)
+      d <- d[30:length(d)]
+      d <- strsplit(d, split = " ")
+      d <- rapply(d, function(z) z[n])
+      d
+}
+
+# All relevant WordNet files
+wordnets <- paste0("./dict/", 
+                   c("data.noun", "index.noun",
+                     "data.adj", "index.adj",
+                     "data.verb", "index.verb",
+                     "data.adv", "index.adv"))
+
+# Scrape data from all WordNet files and remove duplicates
+wordnet <- c()
+for (w in wordnets) {
+      if (grepl("data", w)) {
+             n <- 5
+      } else n <- 1
+      i <- wordnetReader(w, n)
+      wordnet <- c(wordnet, i)
+}
+wordnet <- unique(wordnet)
+
+```
+
+Can you think of a way to increase the coverage -- identifying words that may not be in the corpora or using a smaller number of words in the dictionary to cover the same number of phrases?
+```{r}
+
+
+```
 
 
 
