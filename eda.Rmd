@@ -199,15 +199,19 @@ qplot(x = pctcoverage, y = 1:nrow(ugram.freq), data = ugram.freq,
 ```
 
 How do you evaluate how many of the words come from foreign languages?
-To answer this, it would help to have a list of all words in the english language. It isn't feasible to get a list of all words in all non-English languages. Many might not be documented very well online and some use non-latin alphabets.
+In theory, words from foreign languages along with things like misspellings and other oddities would be distributed very sparsly amongst the data. Therefore, it should be filtered out by the removeSparseTerms function.
+
+Can you think of a way to increase the coverage -- identifying words that may not be in the corpora or using a smaller number of words in the dictionary to cover the same number of phrases?
+
+To answer this, it would help to have a list of all words in the English language.
 http://wordnet.princeton.edu/
 ```{r}
 # Function to read the Princeton WordNet files
 wordnetReader <- function(x, n) {
       d <- readLines(x)
-      d <- d[30:length(d)]
-      d <- strsplit(d, split = " ")
-      d <- rapply(d, function(z) z[n])
+      d <- d[30:length(d)] # First 29 lines consist of licensing info
+      d <- strsplit(d, split = " ") # Space delimited
+      d <- rapply(d, function(z) z[n]) # Extract the word from each row only
       d
 }
 
@@ -227,11 +231,15 @@ for (w in wordnets) {
       i <- wordnetReader(w, n)
       wordnet <- c(wordnet, i)
 }
-wordnet <- unique(wordnet)
+wordnet <- unique(wordnet) # Remove duplicates
+
+# Identify bigrams and trigrams in the WordNet list
+
+
 
 ```
 
-Can you think of a way to increase the coverage -- identifying words that may not be in the corpora or using a smaller number of words in the dictionary to cover the same number of phrases?
+
 ```{r}
 
 
