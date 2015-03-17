@@ -239,9 +239,11 @@ wordnet <- unique(wordnet) # Remove duplicates
 
 ```
 
-
+# Modeling
+http://www.cs.columbia.edu/~mcollins/
 ```{r}
-
+# Create a probability distribution for the unigram, bigram and trigram set.
+ugram.freq$p <- ugram.freq$count / sum(ugram.freq$count)
 
 ```
 
