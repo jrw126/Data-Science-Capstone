@@ -122,11 +122,11 @@ tdm.3t <- removeSparseTerms(tdm.3, 0.99995)
 
 # Frequency tables of bigrams and trigrams
 bgram.freq <- as.matrix(rollup(tdm.2t, 2, na.rm = T, FUN = sum))
-bgram.freq <- data.frame(word = rownames(bgram.freq), count = bgram.freq[, 1], row.names = NULL)
+bgram.freq <- data.frame(bigram = rownames(bgram.freq), count = bgram.freq[, 1], row.names = NULL)
 bgram.freq <- bgram.freq[order(-bgram.freq$count), ]
 
 tgram.freq <- as.matrix(rollup(tdm.3t, 2, na.rm = T, FUN = sum))
-tgram.freq <- data.frame(word = rownames(tgram.freq), count = tgram.freq[, 1], row.names = NULL)
+tgram.freq <- data.frame(trigram = rownames(tgram.freq), count = tgram.freq[, 1], row.names = NULL)
 tgram.freq <- tgram.freq[order(-tgram.freq$count), ]
 
 ```
@@ -243,15 +243,19 @@ wordnet <- unique(wordnet) # Remove duplicates
 http://www.cs.columbia.edu/~mcollins/
 ```{r}
 # Create a probability distribution for the unigram, bigram and trigram set.
-ugram.freq$p <- ugram.freq$count / sum(ugram.freq$count)
+ugram.freq$pdist <- ugram.freq$count / sum(ugram.freq$count)
 
-bgram.freq$n1 <- factor(rapply(strsplit(as.character(bgram.freq$word), " "),
+bgram.freq$n1 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "),
                                function(x) x[1]))
-bgram.freq$n2 <- factor(rapply(strsplit(as.character(bgram.freq$word), " "),
+bgram.freq$p.n1 <- lapply(bgram.freq$n1, function(x) sum(bgram.freq$n1 == x) / nrow(bgram.freq))
+bgram.freq$n2 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "),
                                function(x) x[2]))
+bgram.freq$n2.count <- lapply(bgram.freq$n2, function(x) sum(bgram.freq$n2 == x))
 
-bgram.pdist <- aggregate(count ~ n2 + n1, bgram.freq, sum)
-bgram.pdist <- bgram.pdist[, c(2, 1, 3)]
+# this isnt working right, need to pass in 2 factors
+bgram.freq$p.n2.n1 <- lapply(bgram.freq$n2, 
+                             function(x) sum(bgram.freq$n2[bgram.freq$n1 == bgram.freq$n1] == x) / nrow(bgram.freq[bgram.freq$n1 == bgram.freq$n1, ]))
+
 
 tgram.freq$n1 <- rapply(strsplit(as.character(tgram.freq$word), " "),
                         function(x) x[1])
