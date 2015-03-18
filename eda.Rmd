@@ -148,13 +148,13 @@ qplot(x = word, y = count, data = termFreq,
 
 # Bigrams with frequencies in the 95th percentile
 termFreq <- with(bgram.freq, bgram.freq[count >= quantile(count, 0.95), ])
-qplot(x = word, y = count, data = termFreq, 
+qplot(x = bigram, y = count, data = termFreq, 
       main = "Bigram Frequencies", geom = "bar", xlab = "Bigrams", ylab = "Frequency",
       stat = "identity", fill = I("red4")) + coord_flip()
 
 # Trigrams with frequencies in the 99.5th percentile
 termFreq <- with(tgram.freq, tgram.freq[count >= quantile(count, 0.995) ,])
-qplot(x = word, y = count, data = termFreq, main = "Trigram Frequencies",
+qplot(x = trigram, y = count, data = termFreq, main = "Trigram Frequencies",
       geom = "bar", xlab = "Trigrams", ylab = "Frequency",
       stat = "identity", fill = I("seagreen4")) + coord_flip()
 ```
@@ -253,8 +253,12 @@ bgram.freq$n2 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "),
 bgram.freq$n2.count <- lapply(bgram.freq$n2, function(x) sum(bgram.freq$n2 == x))
 
 # this isnt working right, need to pass in 2 factors
+# desired result:
+# for each word (n1), what % of the time is n2 == n2 for a given n1?
 bgram.freq$p.n2.n1 <- lapply(bgram.freq$n2, 
                              function(x) sum(bgram.freq$n2[bgram.freq$n1 == bgram.freq$n1] == x) / nrow(bgram.freq[bgram.freq$n1 == bgram.freq$n1, ]))
+
+
 
 
 tgram.freq$n1 <- rapply(strsplit(as.character(tgram.freq$word), " "),
