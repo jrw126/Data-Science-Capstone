@@ -45,15 +45,24 @@ shrunk <- function(x) {
 }
 
 # Load and sample each file
-en.t <- readLines("./en_US/en_US.twitter.txt")
-en.t <- sample(en.t, size = shrunk(en.t))
+if (!file.exists("twitter.txt")) {
+      en.t <- readLines("./en_US/en_US.twitter.txt")
+      en.t <- sample(en.t, size = shrunk(en.t))
+      write.table(en.t, "twitter.txt")
+} else en.t <- readLines("twitter.txt")
 
-en.b <- readLines("./en_US/en_US.blogs.txt")
-en.b <- sample(en.b, size = shrunk(en.b))
+if (!file.exists("blogs.txt")) {
+      en.b <- readLines("./en_US/en_US.blogs.txt")
+      en.b <- sample(en.b, size = shrunk(en.b))
+      write.table(en.b, "blogs.txt")
+} else en.b <- readLines("blogs.txt")
 
-en.n <- file("./en_US/en_US.news.txt", open = "rb")
-en.n <- readLines(en.n, encoding = "UTF-8")
-en.n <- sample(en.n, size = shrunk(en.n))
+if (!file.exists("news.txt")) {
+      en.n <- file("./en_US/en_US.news.txt", open = "rb")
+      en.n <- readLines(en.n, encoding = "UTF-8")
+      en.n <- sample(en.n, size = shrunk(en.n))
+      write.table(en.n, "news.txt")
+} else en.n <- readLines("news.txt")
 
 ```
 
@@ -81,7 +90,7 @@ corpusCleaner <- function(x) {
       x <- tm_map(x, removePunctuation)
       x <- tm_map(x, removeNumbers)
       x <- tm_map(x, content_transformer(function(z) gsub("[^0-9A-Za-z///' ]", "", z)))
-      x <- tm_map(x, stemDocument)
+#       x <- tm_map(x, stemDocument)
       x <- tm_map(x, stripWhitespace)
       x
 }
@@ -114,11 +123,11 @@ tgram <- function(x) {NGramTokenizer(x, Weka_control(min = 3, max = 3))}
 
 tdm.2 <- TermDocumentMatrix(en.all, control = list(tokenize = bgram))
 # sparsity value may need tweaking, once comfortable have it overwrite tdm.2
-tdm.2t <- removeSparseTerms(tdm.2, 0.999)
+tdm.2t <- removeSparseTerms(tdm.2, 0.99999)
 
 tdm.3 <- TermDocumentMatrix(en.all, control = list(tokenize = tgram))
 # sparsity value may need tweaking, once comfortable have it overwrite tdm.3
-tdm.3t <- removeSparseTerms(tdm.3, 0.99995)
+tdm.3t <- removeSparseTerms(tdm.3, 0.99999)
 
 # Frequency tables of bigrams and trigrams
 bgram.freq <- as.matrix(rollup(tdm.2t, 2, na.rm = T, FUN = sum))
@@ -245,13 +254,6 @@ http://www.cs.columbia.edu/~mcollins/
 # Create a probability distribution for the unigram, bigram and trigram set.
 ugram.freq$pdist <- ugram.freq$count / sum(ugram.freq$count)
 
-# bgram.freq$n1 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "),
-#                                function(x) x[1]))
-# bgram.freq$p.n1 <- lapply(bgram.freq$n1, function(x) sum(bgram.freq$n1 == x) / nrow(bgram.freq))
-# bgram.freq$n2 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "),
-#                                function(x) x[2]))
-# bgram.freq$n2.count <- lapply(bgram.freq$n2, function(x) sum(bgram.freq$n2 == x))
-
 # bigram probability distributions
 bgram.pdist <- data.frame(bigram = rownames(tdm.2t),
                           n1 = rapply(strsplit(rownames(tdm.2t), " "), function(x) x[1]),
@@ -272,15 +274,16 @@ tgram.pdist <- tgram.pdist[, 2:5]
 names(tgram.pdist)[4] <- "count"
 tgram.pdist$p.n1 <- ave(tgram.pdist$count, tgram.pdist$n1, FUN = sum) / sum(tgram.pdist$count)
 tgram.pdist$p.n2.n1 <- ave(tgram.pdist$count, tgram.pdist$n2, FUN = sum) / ave(tgram.pdist$count, tgram.pdist$n1, FUN = sum)
-tgram.pdist$p.n3.n2.n1 <- tgram.pdist$count / ave(tgram.pdist$count, bgram.pdist$n2, FUN = sum)
+tgram.pdist$p.n3.n2.n1 <- tgram.pdist$count / ave(tgram.pdist$count, tgram.pdist$n1, tgram.pdist$n2, FUN = sum)
 
-# tgram.freq$n1 <- rapply(strsplit(as.character(tgram.freq$word), " "),
-#                         function(x) x[1])
-# tgram.freq$n2 <- rapply(strsplit(as.character(tgram.freq$word), " "),
-#                         function(x) x[2])
-# tgram.freq$n3 <- rapply(strsplit(as.character(tgram.freq$word), " "),
-#                         function(x) x[3])
 ```
 
+Consider writing probability distribution tables to flat files and using that for the app. Do all analysis in a separate file, etc.
 
+
+# Testing
+```{r}
+
+
+```
 
