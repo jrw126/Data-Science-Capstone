@@ -13,21 +13,21 @@ if(Sys.getenv("JAVA_HOME")!=""){
 }
 
 library(tm)
-library(SnowballC)
-library(openNLP)
-library(NLP)
 library(RWeka)
 library(slam)
-library(wordcloud)
 library(RColorBrewer)
-library(ggplot2); library(scales)
-library(reshape2)
+library(ggplot2)
+library(scales)
+library(data.table)
 
 # additional resource
 # http://nlpwp.org/book/index.xhtml
 # http://www.nltk.org/book/?=
 # http://www.e-booksdirectory.com/listing.php?category=281
 # http://simplystatistics.org/2015/02/05/johns-hopkins-data-science-specialization-top-performers/
+# http://stackoverflow.com/questions/19615181/finding-ngrams-in-r-and-comparing-ngrams-across-corpora
+# http://beyondvalence.blogspot.com/2014/01/text-mining-4-performing-term.html
+# http://rstudio-pubs-static.s3.amazonaws.com/39474_1e1930a37b6f4b1bbfaf916db55b0397.html
 
 # Set wd to the right computer
 if (Sys.getenv("USERNAME") == "jwright") {
@@ -37,7 +37,7 @@ if (Sys.getenv("USERNAME") == "jwright") {
 # Load data
 set.seed(123)
 
-# Function to shrink the data to 1/n of its original size
+# Function to shrink the data to 1/20 of its original size
 shrunk <- function(x) {
       if (class(x) == "data.frame") {
             nrow(x) / 20
@@ -62,7 +62,7 @@ if (!file.exists("news.txt")) {
       en.n <- readLines(en.n, encoding = "UTF-8")
       en.n <- sample(en.n, size = shrunk(en.n))
       write.table(en.n, "news.txt")
-} else en.n <- readLines("news.txt")
+} else en.n <- readLines(file("news.txt", open = "rb"), encoding = "UTF-8")
 
 ```
 
@@ -86,11 +86,9 @@ Other helpful data sources ideas:
 # Convert each data set to a corpus and clean the data
 corpusCleaner <- function(x) {
       x <- Corpus(VectorSource(x))
+      x <- tm_map(x, content_transformer(function(z) gsub("[^A-Za-z///' ]", "", z)))
       x <- tm_map(x, content_transformer(tolower))
       x <- tm_map(x, removePunctuation)
-      x <- tm_map(x, removeNumbers)
-      x <- tm_map(x, content_transformer(function(z) gsub("[^0-9A-Za-z///' ]", "", z)))
-#       x <- tm_map(x, stemDocument)
       x <- tm_map(x, stripWhitespace)
       x
 }
@@ -102,108 +100,120 @@ en.t <- corpusCleaner(en.t)
 
 # Combine the corpora into 1.
 en.all <- do.call(function(...) c(..., recursive = T), list(en.b, en.n, en.t))
+rm(en.b); rm(en.n); rm(en.t)
 
 # Create a term document matrix
 tdm <- TermDocumentMatrix(en.all)
-
-# Create a term document matrix that includes only the common tokens
-tdm.c <- removeSparseTerms(tdm, 0.99) # add values to play with size. had this at .99 before
-
-# Create a dense term document matrix from the common tokens
-tdm.d <- as.matrix(tdm.c)
-
-# Create a frequency table of the dense matrix
-freq <- data.frame(word = rownames(tdm.d), count = rowSums(tdm.d), row.names = NULL)
-freq <- freq[order(-freq$count), ]
-
-# Create N-grams
-# http://stackoverflow.com/questions/19615181/finding-ngrams-in-r-and-comparing-ngrams-across-corpora
-bgram <- function(x) {NGramTokenizer(x, Weka_control(min = 2, max = 2))}
-tgram <- function(x) {NGramTokenizer(x, Weka_control(min = 3, max = 3))}
-
-tdm.2 <- TermDocumentMatrix(en.all, control = list(tokenize = bgram))
-# sparsity value may need tweaking, once comfortable have it overwrite tdm.2
-tdm.2t <- removeSparseTerms(tdm.2, 0.99999)
-
-tdm.3 <- TermDocumentMatrix(en.all, control = list(tokenize = tgram))
-# sparsity value may need tweaking, once comfortable have it overwrite tdm.3
-tdm.3t <- removeSparseTerms(tdm.3, 0.99999)
-
-# Frequency tables of bigrams and trigrams
-bgram.freq <- as.matrix(rollup(tdm.2t, 2, na.rm = T, FUN = sum))
-bgram.freq <- data.frame(bigram = rownames(bgram.freq), count = bgram.freq[, 1], row.names = NULL)
-bgram.freq <- bgram.freq[order(-bgram.freq$count), ]
-
-tgram.freq <- as.matrix(rollup(tdm.3t, 2, na.rm = T, FUN = sum))
-tgram.freq <- data.frame(trigram = rownames(tgram.freq), count = tgram.freq[, 1], row.names = NULL)
-tgram.freq <- tgram.freq[order(-tgram.freq$count), ]
-
 ```
+
+# Term Document Matrix Analysis
+
+We want a TDM that excludes tokens that are extremely uncommon because they are probably wrong - maybe a weird misspelling, a grammar mistake, or from a foreign language. We'll use `removeSparseTerms` and `findFreqTerms` to get a sense of what a good threshold might be.
+```{r}
+# Find words that appear 1 to 5 times in the original TDM
+lowFreqTerms <- findFreqTerms(tdm, lowfreq = 1, highfreq = 3)
+sample(lowFreqTerms, 20)
+```
+Most of these words are gibberish, profanity, possible acronyms, or words from a different language. We should remove some of these highly uncommon tokens
+
+```{r}
+tdm.c <- removeSparseTerms(tdm, 0.99999) # add values to play with size. had this at .99 before
+lowFreqTerms <- findFreqTerms(tdm.c, lowfreq = 1, highfreq = 3)
+sample(lowFreqTerms, 20)
+```
+We're getting closer. There's still some gibberish and things that could be extraordinarily rare portmanteaus.
+
+```{r}
+tdm.c <- removeSparseTerms(tdm, 0.9999)
+lowFreqTerms <- findFreqTerms(tdm.c, lowfreq = 1, highfreq = 30)
+sample(lowFreqTerms, 20)
+```
+This looks much better, I don't see anything that doesn't make sense. One thing to note is that for this subset, the `highfreq` parameter in was raised to 30. This means there is no token in the TDM that occurs less than 30 times in the corpus. I think this is a good conservative starting point.
 
 # Exploratory Analysis
 Some words are more frequent than others - what are the distributions of word frequencies? 
 What are the frequencies of 2-grams and 3-grams in the dataset? 
+
+Next, we consolidate the TDM to get the counts for our unigram tokens and take a look at some of the word frequencies to see if it makes sense.
 ```{r}
-# http://beyondvalence.blogspot.com/2014/01/text-mining-4-performing-term.html
-# http://rstudio-pubs-static.s3.amazonaws.com/39474_1e1930a37b6f4b1bbfaf916db55b0397.html
-findFreqTerms(tdm, 99)
+# Consolidate the TDM into the sum of the row for each word
+if (!file.exists("ugrams.txt")) {
+      tdm.c <- rollup(tdm.c, 2, na.rm = T, FUN = sum)
+      tdm.c <- data.frame(word = rownames(tdm.c), as.matrix(tdm.c), row.names = NULL)
+      names(tdm.c)[2] <- "count"
+      tdm.c <- with(tdm.c, tdm.c[order(-count), ])
+      write.table(tdm.c, "ugrams.txt", sep = "\t", row.names = F)
+} else tdm.c <- read.delim("ugrams.txt", sep = "\t")
 
-# Create frequency tables of unigrams, bigrams, and trigrams
-# Unigrams with frequencies in the 50th percentile
-termFreq <- freq[freq$count >= quantile(freq$count, 0.5), ] # above the 50th percentile
-qplot(x = word, y = count, data = termFreq, 
+highFreq <- quantile(tdm.c$count, 0.995)
+qplot(x = word, y = count, data = tdm.c[tdm.c$count > highFreq, ], 
       main = "Term Frequencies", geom = "bar", xlab = "Unigrams", ylab = "Frequency", 
-      stat = "identity", fill = I("royalblue4")) + coord_flip()
+      stat = "identity", fill = I("royalblue4")) + 
+      scale_y_continuous(labels = comma) + coord_flip()
 
-# Bigrams with frequencies in the 95th percentile
-termFreq <- with(bgram.freq, bgram.freq[count >= quantile(count, 0.95), ])
-qplot(x = bigram, y = count, data = termFreq, 
+```
+
+Now we do the same for bigrams and trigrams!
+```{r}
+# Functions to create bigrams and trigrams
+bgram <- function(x) {NGramTokenizer(x, Weka_control(min = 2, max = 2))}
+tgram <- function(x) {NGramTokenizer(x, Weka_control(min = 3, max = 3))}
+
+if (!file.exists("bgrams.txt")) {
+      tdm.2 <- TermDocumentMatrix(en.all, control = list(tokenize = bgram))
+      tdm.2t <- removeSparseTerms(tdm.2, 0.999995) # Test sparsity the same way as unigrams.
+      bgram.freq <- as.matrix(rollup(tdm.2, 2, na.rm = T, FUN = sum))
+      bgram.freq <- data.frame(bigram = rownames(bgram.freq), count = bgram.freq[, 1], row.names = NULL)
+      bgram.freq <- bgram.freq[order(-bgram.freq$count), ]
+      write.table(bgram.freq, "bgrams.txt", sep = "\t", row.names = F)
+} else bgram.freq <- read.delim("bgrams.txt", sep = "\t")
+
+if (!file.exists("tgrams.txt")) {
+      tdm.3 <- TermDocumentMatrix(en.all, control = list(tokenize = tgram))
+      tdm.3t <- removeSparseTerms(tdm.3, 0.999995) # Test sparsity the same way as unigrams.
+      tgram.freq <- as.matrix(rollup(tdm.3, 2, na.rm = T, FUN = sum))
+      tgram.freq <- data.frame(trigram = rownames(tgram.freq), count = tgram.freq[, 1], row.names = NULL)
+      tgram.freq <- tgram.freq[order(-tgram.freq$count), ]
+      write.table(tgram.freq, "tgrams.txt", sep = "\t", row.names = F)
+} else tgram.freq <- read.delim("tgrams.txt", sep = "\t")
+```
+
+Now lets take a look at some of our frequent bigrams and trigrams.
+```{r}
+# Bigrams
+highFreq <- with(bgram.freq, bgram.freq[count >= quantile(count, 0.99995), ])
+qplot(x = bigram, y = count, data = highFreq, 
       main = "Bigram Frequencies", geom = "bar", xlab = "Bigrams", ylab = "Frequency",
-      stat = "identity", fill = I("red4")) + coord_flip()
-
-# Trigrams with frequencies in the 99.5th percentile
-termFreq <- with(tgram.freq, tgram.freq[count >= quantile(count, 0.995) ,])
-qplot(x = trigram, y = count, data = termFreq, main = "Trigram Frequencies",
-      geom = "bar", xlab = "Trigrams", ylab = "Frequency",
-      stat = "identity", fill = I("seagreen4")) + coord_flip()
+      stat = "identity", fill = I("red4")) + 
+      scale_y_continuous(labels = comma) + coord_flip()
 ```
 
 ```{r}
-# Too large to work with as a matrix, so I am doing this iteratively and writing the results to a file
-# This takes a long time to run.
-# totalWords <- removeSparseTerms(tdm, 0.9999)
-# uWords <- rownames(totalWords)
-# data <- c()
-# for (word in 1:length(uWords)) { 
-#       r <- c(uWords[word], sum(totalWords[uWords[word], ]))
-#       data <- c(data, r)
-# }
-# data <- data.frame(word = data[seq(1, length(data), 2)], count = as.integer(data[seq(2, length(data), 2)]))
-# 
-# write.table(data, "completeUnigramFreqTable.txt", sep = "\t", row.names = F)
-
-# This code creates the file used in the chunk below
+# Trigrams
+highFreq <- with(tgram.freq, tgram.freq[count >= quantile(count, 0.99998) ,])
+qplot(x = trigram, y = count, data = highFreq, main = "Trigram Frequencies",
+      geom = "bar", xlab = "Trigrams", ylab = "Frequency",
+      stat = "identity", fill = I("seagreen4")) + 
+      scale_y_continuous(labels = comma) + coord_flip()
 ```
 
 How many unique words do you need in a frequency sorted dictionary 
 to cover 50% of all word instances in the language? 90%?
 ```{r}
-ugram.freq <- read.delim("completeUnigramFreqTable.txt", sep = "\t", header = T, stringsAsFactors = F)
-ugram.freq <- ugram.freq[order(-ugram.freq$count), ]
-ugram.freq$cumsum <- cumsum(ugram.freq$count)
-ugram.freq$pctcoverage <- ugram.freq$cumsum / sum(ugram.freq$count)
+tdm.c$cumsum <- cumsum(tdm.c$count)
+tdm.c$pctcoverage <- tdm.c$cumsum / sum(tdm.c$count)
 
 pcts <- seq(.1, .9, .1)
-pts <- sapply(pcts, function(x) with(ugram.freq, which.max(pctcoverage[pctcoverage <= x])))
+pts <- sapply(pcts, function(x) with(tdm.c, which.max(pctcoverage[pctcoverage <= x])))
 
-qplot(x = pctcoverage, y = 1:nrow(ugram.freq), data = ugram.freq,
+qplot(x = pctcoverage, y = 1:nrow(tdm.c), data = tdm.c,
       main = "Percent of Language Coverage", xlab = "Percentage", ylab = "Number of Unique Words") +
       ggtitle(expression(atop(bold("Percent of Word Instance Coverage"), atop(italic("per unique word"), "")))) + 
       geom_point(colour = I("cadetblue3")) +
-      geom_point(data = ugram.freq[pts, ], aes(x = pctcoverage, y = pts), colour = I("darkred"), size = 4) + 
-      geom_text(data = ugram.freq[pts, ], aes(x = pctcoverage, y = pts + 170, label = comma(pts)), colour = "darkred") +
+      geom_point(data = tdm.c[pts, ], aes(x = pctcoverage, y = pts), colour = I("darkred"), size = 4) + 
+      geom_text(data = tdm.c[pts, ], aes(x = pctcoverage, y = pts + 200, label = comma(pts)), colour = "darkred") +
       scale_x_continuous(breaks = seq(0, 1, .1), labels = percent) + 
-      scale_y_continuous(breaks = seq(0, 9000, 1000), labels = comma)
+      scale_y_continuous(breaks = seq(0, 12e3, 1e3), labels = comma)
 
 ```
 
@@ -241,44 +251,76 @@ for (w in wordnets) {
       wordnet <- c(wordnet, i)
 }
 wordnet <- unique(wordnet) # Remove duplicates
-
-# Identify bigrams and trigrams in the WordNet list
-
-
-
 ```
 
 # Modeling
 http://www.cs.columbia.edu/~mcollins/
 ```{r}
 # Create a probability distribution for the unigram, bigram and trigram set.
-ugram.freq$pdist <- ugram.freq$count / sum(ugram.freq$count)
+tdm.c$pdist <- tdm.c$count / sum(tdm.c$count)
 
-# bigram probability distributions
-bgram.pdist <- data.frame(bigram = rownames(tdm.2t),
-                          n1 = rapply(strsplit(rownames(tdm.2t), " "), function(x) x[1]),
-                          n2 = rapply(strsplit(rownames(tdm.2t), " "), function(x) x[2]),
-                          counts = as.matrix(rollup(tdm.2t, 2, na.rm = T, FUN = sum)))
-bgram.pdist <- bgram.pdist[, 2:4]
-names(bgram.pdist)[3] <- "count"
-bgram.pdist$p.n1 <- ave(bgram.pdist$count, bgram.pdist$n1, FUN = sum) / sum(bgram.pdist$count)
-bgram.pdist$p.n2.n1 <- bgram.pdist$count / ave(bgram.pdist$count, bgram.pdist$n1, FUN = sum)
+# Bigram probability distributions
+if (ncol(bgram.freq) < 6) {
+      bgram.freq$n1 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "), function(x) x[1]))
+      bgram.freq$n2 <- factor(rapply(strsplit(as.character(bgram.freq$bigram), " "), function(x) x[2]))
+      bgram.freq$p.n1 <- ave(bgram.freq$count, bgram.freq$n1, FUN = sum) / sum(bgram.freq$count)
+      bgram.freq$p.n2.n1 <- bgram.freq$count / ave(bgram.freq$count, bgram.freq$n1, FUN = sum)
+      write.table(bgram.freq, "bgrams.txt", sep = "\t", row.names = F)
+}
 
-# trigram probability distributions
-tgram.pdist <- data.frame(trigram = rownames(tdm.3t),
-                          n1 = rapply(strsplit(rownames(tdm.3t), " "), function(x) x[1]),
-                          n2 = rapply(strsplit(rownames(tdm.3t), " "), function(x) x[2]),
-                          n3 = rapply(strsplit(rownames(tdm.3t), " "), function(x) x[3]),
-                          counts = as.matrix(rollup(tdm.3t, 2, na.rm = T, FUN = sum)))
-tgram.pdist <- tgram.pdist[, 2:5]
-names(tgram.pdist)[4] <- "count"
-tgram.pdist$p.n1 <- ave(tgram.pdist$count, tgram.pdist$n1, FUN = sum) / sum(tgram.pdist$count)
-tgram.pdist$p.n2.n1 <- ave(tgram.pdist$count, tgram.pdist$n2, FUN = sum) / ave(tgram.pdist$count, tgram.pdist$n1, FUN = sum)
-tgram.pdist$p.n3.n2.n1 <- tgram.pdist$count / ave(tgram.pdist$count, tgram.pdist$n1, tgram.pdist$n2, FUN = sum)
+
+# Trigram probability distributions
+if (ncol(tgram.freq) < 8) {
+      tgram.freq$n1 <- factor(rapply(strsplit(as.character(tgram.freq$trigram), " "), function(x) x[1]))
+      tgram.freq$n2 <- factor(rapply(strsplit(as.character(tgram.freq$trigram), " "), function(x) x[2]))
+      tgram.freq$n3 <- factor(rapply(strsplit(as.character(tgram.freq$trigram), " "), function(x) x[3]))
+      tgram.freq$p.n1 <- ave(tgram.freq$count, tgram.freq$n1, FUN = sum) / sum(tgram.freq$count)
+      
+      # Aggregating and merging because ave doesn't behave on data of this size.
+      n2n1 <- aggregate(count ~ n2 + n1, tgram.freq, sum)
+      tgram.freq <- merge(tgram.freq, n2n1, by.x = c("n1", "n2"), by.y = c("n1", "n2"))
+      
+      tgram.freq$p.n2.n1 <- tgram.freq$count.y / ave(tgram.freq$count.x, tgram.freq$n1, FUN = sum)
+      tgram.freq$p.n3.n2.n1 <- with(tgram.freq, count.x / count.y)
+      tgram.freq <- tgram.freq[, c(3, 1, 2, 5, 4, 6, 8, 9)]
+      names(tgram.freq)[5] <- "count"
+      write.table(tgram.freq, "tgrams.txt", sep = "\t", row.names = F)
+}
+
+bgram.freq <- data.table(bgram.freq)
+bgram <- bgram.freq[which(ave(bgram.freq$p.n2.n1, bgram.freq$n1, FUN = function(x) x == max(x)) == 1), ]
+bgram <- bgram[!duplicated(bgram$n1), ]
+
+tgram.freq <- data.table(tgram.freq)
+tgram <- tgram.freq[which(ave(tgram.freq$p.n3.n2.n1, tgram.freq$n3, FUN = function(x) x == max(x)) == 1), ]
+tgram <- tgram[!duplicated(tgram$n3), ]
+```
+
+And there we have it! When someone types something, we simply pick the most frequently occuring trigram that matches and hand them back a prediction! Voila! But what if the type a trigram we haven't seen before... In that case, we'll just need every possible combination of trigrams to reference from. So, for our data set of 11,000 unigrams, we'll just need approximately 11,000^3 trigrams which seems... impossible. Is there as simpler way?
+
+
+```{r}
+# Backoff model
+# If the trigram is unseen, use the bigram. If the bigram is unseen, use the unigram.
+
+# ALTERNATIVELY
+# try this...
+# Using the unigram set, create all possible bigrams and trigrams (ie create a data.table with every combination of words)
+# Find counts of those words, bigrams, and trigrams in the data
+# calculate probabilities
+# keep all unseen bigrams and trigrams
+# if no word is entered, predict "the", if first word was entered but no bigram match, predict "and"
+
+# a way to make the prediction:
+# trigram:
+# take the trigram
+
+bgram.u <- data.table(expand.grid(tdm.c$word, tdm.c$word))
+bgram.u <- bgram.u[!bgram.u$Var1 == bgram.u$Var2, ]
+bgram.u$bigram <- as.character(paste(bgram.u$Var1, bgram.u$Var2, sep = " "))
 
 ```
 
-Consider writing probability distribution tables to flat files and using that for the app. Do all analysis in a separate file, etc.
 
 
 # Testing
@@ -287,3 +329,84 @@ Consider writing probability distribution tables to flat files and using that fo
 
 ```
 
+# old stuff
+```{r}
+# Create a dense term document matrix from the common tokens
+# tdm.c <- as.matrix(tdm.c)
+# 
+# # Create a frequency table of the dense matrix
+# freq <- data.frame(word = rownames(tdm.d), count = rowSums(tdm.d), row.names = NULL)
+# freq <- freq[order(-freq$count), ]
+
+# Frequency tables of bigrams and trigrams
+# tdm.2t <- removeSparseTerms(tdm.2, 0.99998)
+# bgram.freq <- as.matrix(rollup(tdm.2t, 2, na.rm = T, FUN = sum))
+# bgram.freq <- data.frame(bigram = rownames(bgram.freq), count = bgram.freq[, 1], row.names = NULL)
+# bgram.freq <- bgram.freq[order(-bgram.freq$count), ]
+
+# tdm.3t <- removeSparseTerms(tdm.3, 0.999999)
+# lowFreqTerms <- findFreqTerms(tdm.3t, 1, 1)
+# sample(lowFreqTerms, 20)
+# # sparsity value may need tweaking, once comfortable have it overwrite tdm.3
+# tdm.3t <- removeSparseTerms(tdm.3, 0.99995)
+
+# termFreq <- freq[freq$count >= quantile(freq$count, 0.5), ] # above the 50th percentile
+# qplot(x = word, y = count, data = termFreq, 
+#       main = "Term Frequencies", geom = "bar", xlab = "Unigrams", ylab = "Frequency", 
+#       stat = "identity", fill = I("royalblue4")) + coord_flip()
+
+# ugram.freq <- read.delim("completeUnigramFreqTable.txt", sep = "\t", header = T, stringsAsFactors = F)
+
+# tdm.c <- tdm.c[order(-tdm.c$count), ]
+
+
+# ugram.freq <- ugram.freq[order(-ugram.freq$count), ]
+# ugram.freq$cumsum <- cumsum(ugram.freq$count)
+# ugram.freq$pctcoverage <- ugram.freq$cumsum / sum(ugram.freq$count)
+
+# bigram probability distributions
+# bgram.pdist <- data.frame(bigram = rownames(tdm.2t),
+#                           n1 = rapply(strsplit(rownames(tdm.2t), " "), function(x) x[1]),
+#                           n2 = rapply(strsplit(rownames(tdm.2t), " "), function(x) x[2]),
+#                           counts = as.matrix(rollup(tdm.2t, 2, na.rm = T, FUN = sum)))
+# bgram.pdist <- bgram.pdist[, 2:4]
+# names(bgram.pdist)[3] <- "count"
+# bgram.pdist$p.n1 <- ave(bgram.pdist$count, bgram.pdist$n1, FUN = sum) / sum(bgram.pdist$count)
+# bgram.pdist$p.n2.n1 <- bgram.pdist$count / ave(bgram.pdist$count, bgram.pdist$n1, FUN = sum)
+# 
+# # trigram probability distributions
+# tgram.pdist <- data.frame(trigram = rownames(tdm.3t),
+#                           n1 = rapply(strsplit(rownames(tdm.3t), " "), function(x) x[1]),
+#                           n2 = rapply(strsplit(rownames(tdm.3t), " "), function(x) x[2]),
+#                           n3 = rapply(strsplit(rownames(tdm.3t), " "), function(x) x[3]),
+#                           counts = as.matrix(rollup(tdm.3t, 2, na.rm = T, FUN = sum)))
+# tgram.pdist <- tgram.pdist[, 2:5]
+# names(tgram.pdist)[4] <- "count"
+# tgram.pdist$p.n1 <- ave(tgram.pdist$count, tgram.pdist$n1, FUN = sum) / sum(tgram.pdist$count)
+# tgram.pdist$p.n2.n1 <- ave(tgram.pdist$count, tgram.pdist$n2, FUN = sum) / ave(tgram.pdist$count, tgram.pdist$n1, FUN = sum)
+# tgram.pdist$p.n3.n2.n1 <- tgram.pdist$count / ave(tgram.pdist$count, tgram.pdist$n1, tgram.pdist$n2, FUN = sum)
+
+# tgram.freq$p.n2.n1 <- ave(tgram.freq$count, tgram.freq$n1, tgram.freq$n2, FUN = sum) / ave(tgram.freq$count, tgram.freq$n1, FUN = sum)
+
+ # This step is too big to calculate, do it another way
+# tgram.freq$p.n3.n2.n1 <- tgram.freq$count / ave(tgram.freq$count, tgram.freq$n1, tgram.freq$n2, FUN = sum)
+
+
+```
+
+```{r}
+# Too large to work with as a matrix, so I am doing this iteratively and writing the results to a file
+# This takes a long time to run.
+# totalWords <- removeSparseTerms(tdm, 0.9999)
+# uWords <- rownames(totalWords)
+# data <- c()
+# for (word in 1:length(uWords)) { 
+#       r <- c(uWords[word], sum(totalWords[uWords[word], ]))
+#       data <- c(data, r)
+# }
+# data <- data.frame(word = data[seq(1, length(data), 2)], count = as.integer(data[seq(2, length(data), 2)]))
+# 
+# write.table(data, "completeUnigramFreqTable.txt", sep = "\t", row.names = F)
+
+# This code creates the file used in the chunk below
+```
